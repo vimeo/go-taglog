@@ -163,6 +163,11 @@ var DefaultParams = Params{
 	Flag:                LstdFlags,
 }
 
+// Directly access the standard global logger
+func Global() *Logger {
+	return std
+}
+
 // Create a new Logger by copying the formatting and tags from another Logger.
 func (this *Logger) Copy() *Logger {
 	this.mu.Lock()
