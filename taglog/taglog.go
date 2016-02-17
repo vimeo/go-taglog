@@ -121,10 +121,14 @@ type Params struct {
 
 // taglog counterpart to the log.Logger type
 type Logger struct {
-	mu     sync.Mutex
-	tags   Tags
-	out    io.Writer
-	params Params
+	mu            sync.Mutex
+	tags          Tags
+	levelset      *LevelSet
+	level         string
+	levelTag      string
+	standardLevel string
+	out           io.Writer
+	params        Params
 }
 
 // See log.New
@@ -135,6 +139,8 @@ func New(out io.Writer, prefix string, flag int) *Logger {
 	tl.params = DefaultParams
 	tl.params.Prefix = prefix
 	tl.params.Flag = flag
+	tl.DefineLevels(DefaultLevelSet)
+	tl.levelTag = "level"
 	return tl
 }
 
@@ -196,6 +202,11 @@ func calcTsFormat(params *Params) string {
 
 // See log.Logger.Output
 func (this *Logger) Output(s string) error {
+	return this.Loutput(this.standardLevel, s)
+}
+
+// See log.Logger.Output
+func (this *Logger) Loutput(level string, s string) error {
 	var err error
 	var b []byte
 
@@ -213,6 +224,21 @@ func (this *Logger) Output(s string) error {
 		case TimestampFormatTypeStd:
 			fracsec := now.Nanosecond() / 1000
 			nowStr += fmt.Sprintf(".%06d", fracsec)
+		}
+	}
+
+	if level != "" && this.levelset != nil && this.level != "" {
+		// discard messages lower than the current log level
+		if this.levelset.Less(level, this.level) {
+			return nil
+		}
+
+		// set level tag
+		if this.levelTag != "" {
+			if this.levelset.Contains(level) {
+				this.tags.Set(this.levelTag, strings.ToUpper(level))
+				defer this.tags.Del(this.levelTag)
+			}
 		}
 	}
 
@@ -507,6 +533,18 @@ func (this *Logger) Println(v ...interface{}) {
 	this.Output(fmt.Sprint(v...))
 }
 
+func (this *Logger) Lprintf(level string, format string, v ...interface{}) {
+	this.Loutput(level, fmt.Sprintf(format, v...))
+}
+
+func (this *Logger) Lprint(level string, v ...interface{}) {
+	this.Loutput(level, fmt.Sprint(v...))
+}
+
+func (this *Logger) Lprintln(level string, v ...interface{}) {
+	this.Loutput(level, fmt.Sprint(v...))
+}
+
 // See log.Logger.Fatal
 func (this *Logger) Fatal(v ...interface{}) {
 	this.Output(fmt.Sprint(v...))
@@ -522,6 +560,21 @@ func (this *Logger) Fatalf(format string, v ...interface{}) {
 // See log.Logger.Fatalln
 func (this *Logger) Fatalln(v ...interface{}) {
 	this.Output(fmt.Sprintln(v...))
+	os.Exit(1)
+}
+
+func (this *Logger) Lfatal(level string, v ...interface{}) {
+	this.Loutput(level, fmt.Sprint(v...))
+	os.Exit(1)
+}
+
+func (this *Logger) Lfatalf(level string, format string, v ...interface{}) {
+	this.Loutput(level, fmt.Sprintf(format, v...))
+	os.Exit(1)
+}
+
+func (this *Logger) Lfatalln(level string, v ...interface{}) {
+	this.Loutput(level, fmt.Sprintln(v...))
 	os.Exit(1)
 }
 
@@ -689,6 +742,18 @@ func Println(v ...interface{}) {
 	std.Output(fmt.Sprint(v...))
 }
 
+func Lprintf(level string, format string, v ...interface{}) {
+	std.Loutput(level, fmt.Sprintf(format, v...))
+}
+
+func Lprint(level string, v ...interface{}) {
+	std.Loutput(level, fmt.Sprint(v...))
+}
+
+func Lprintln(level string, v ...interface{}) {
+	std.Loutput(level, fmt.Sprint(v...))
+}
+
 // See log.Fatal
 func Fatal(v ...interface{}) {
 	std.Output(fmt.Sprint(v...))
@@ -704,6 +769,21 @@ func Fatalf(format string, v ...interface{}) {
 // See log.Fatalln
 func Fatalln(v ...interface{}) {
 	std.Output(fmt.Sprintln(v...))
+	os.Exit(1)
+}
+
+func Lfatal(level string, v ...interface{}) {
+	std.Loutput(level, fmt.Sprint(v...))
+	os.Exit(1)
+}
+
+func Lfatalf(level string, format string, v ...interface{}) {
+	std.Loutput(level, fmt.Sprintf(format, v...))
+	os.Exit(1)
+}
+
+func Lfatalln(level string, v ...interface{}) {
+	std.Loutput(level, fmt.Sprintln(v...))
 	os.Exit(1)
 }
 
