@@ -171,23 +171,21 @@ func (this *Logger) Copy() *Logger {
 	return &tl
 }
 
-func calcTsFormat(params *Params) string {
-	if params.TimestampFormat != "" {
-		return params.TimestampFormat
-	}
-	switch params.TimestampFormatType {
+// Generate the timestamp format from the type and flags
+func GenTimestampFormat(tsFormatType int, flag int) string {
+	switch tsFormatType {
 	case TimestampFormatTypeISO:
-		if params.Flag&(Ldate|Ltime) != 0 {
-			if params.Flag&Ldate != 0 && params.Flag&Ltime != 0 {
-				if params.Flag&(Lmicroseconds) != 0 {
+		if flag&(Ldate|Ltime) != 0 {
+			if flag&Ldate != 0 && flag&Ltime != 0 {
+				if flag&(Lmicroseconds) != 0 {
 					return "2006-01-02T15:04:05.000000Z07:00"
 				} else {
 					return TimestampFormatISO
 				}
-			} else if params.Flag&Ldate != 0 {
+			} else if flag&Ldate != 0 {
 				return TimestampFormatISODate
 			} else {
-				if params.Flag&(Lmicroseconds) != 0 {
+				if flag&(Lmicroseconds) != 0 {
 					return "15:04:05.000000Z07:00"
 				} else {
 					return TimestampFormatISOTime
@@ -195,17 +193,17 @@ func calcTsFormat(params *Params) string {
 			}
 		}
 	case TimestampFormatTypeStd:
-		if params.Flag&(Ldate|Ltime) != 0 {
-			if params.Flag&Ldate != 0 && params.Flag&Ltime != 0 {
-				if params.Flag&(Lmicroseconds) != 0 {
+		if flag&(Ldate|Ltime) != 0 {
+			if flag&Ldate != 0 && flag&Ltime != 0 {
+				if flag&(Lmicroseconds) != 0 {
 					return "2006/01/02 15:04:05.000000"
 				} else {
 					return TimestampFormatStd
 				}
-			} else if params.Flag&Ldate != 0 {
+			} else if flag&Ldate != 0 {
 				return TimestampFormatStdDate
 			} else {
-				if params.Flag&(Lmicroseconds) != 0 {
+				if flag&(Lmicroseconds) != 0 {
 					return "15:04:05.000000"
 				} else {
 					return TimestampFormatStdTime
@@ -214,6 +212,13 @@ func calcTsFormat(params *Params) string {
 		}
 	}
 	return ""
+}
+
+func calcTsFormat(params *Params) string {
+	if params.TimestampFormat != "" {
+		return params.TimestampFormat
+	}
+	return GenTimestampFormat(params.TimestampFormatType, params.Flag)
 }
 
 // See log.Logger.Output
