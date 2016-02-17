@@ -83,6 +83,7 @@ const (
 	Lmicroseconds                 // microsecond resolution: 01:23:23.123123.  assumes Ltime.
 	Llongfile                     // IGNORED
 	Lshortfile                    // IGNORED
+	LUTC                          // if Ldate or Ltime is set, use UTC rather than the local time zone
 	LstdFlags     = Ldate | Ltime // initial values for the standard logger
 )
 
@@ -103,6 +104,8 @@ func ParseFlags(flags string) int {
 			out |= Llongfile
 		case "lshortfile":
 			out |= Lshortfile
+		case "lutc":
+			out |= LUTC
 		case "lstdflags":
 			out |= LstdFlags
 		}
@@ -231,7 +234,10 @@ func (this *Logger) Loutput(level string, s string) error {
 	var err error
 	var b []byte
 
-	now := time.Now().UTC()
+	now := time.Now()
+	if this.params.Flag&(LUTC) != 0 {
+		now = now.UTC()
+	}
 	this.mu.Lock()
 	defer this.mu.Unlock()
 
