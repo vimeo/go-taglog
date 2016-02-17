@@ -85,6 +85,9 @@ const (
 	Lshortfile                    // IGNORED
 	LUTC                          // if Ldate or Ltime is set, use UTC rather than the local time zone
 	LstdFlags     = Ldate | Ltime // initial values for the standard logger
+
+	// Custom taglog flags (hoping they don't add 12 more standard tags)
+	Lmilliseconds = 1 << 16 // millisecond resolution: 01:23:23.123.  assumes Ltime.
 )
 
 // Get flags from a string.
@@ -108,6 +111,8 @@ func ParseFlags(flags string) int {
 			out |= LUTC
 		case "lstdflags":
 			out |= LstdFlags
+		case "lmilliseconds":
+			out |= Lmilliseconds
 		}
 	}
 	return out
@@ -182,6 +187,8 @@ func GenTimestampFormat(tsFormatType int, flag int) string {
 			if flag&Ldate != 0 && flag&Ltime != 0 {
 				if flag&(Lmicroseconds) != 0 {
 					return "2006-01-02T15:04:05.000000Z07:00"
+				} else if flag&(Lmilliseconds) != 0 {
+					return "2006-01-02T15:04:05.000Z07:00"
 				} else {
 					return TimestampFormatISO
 				}
@@ -190,6 +197,8 @@ func GenTimestampFormat(tsFormatType int, flag int) string {
 			} else {
 				if flag&(Lmicroseconds) != 0 {
 					return "15:04:05.000000Z07:00"
+				} else if flag&(Lmilliseconds) != 0 {
+					return "15:04:05.000Z07:00"
 				} else {
 					return TimestampFormatISOTime
 				}
@@ -200,6 +209,8 @@ func GenTimestampFormat(tsFormatType int, flag int) string {
 			if flag&Ldate != 0 && flag&Ltime != 0 {
 				if flag&(Lmicroseconds) != 0 {
 					return "2006/01/02 15:04:05.000000"
+				} else if flag&(Lmilliseconds) != 0 {
+					return "2006/01/02 15:04:05.000"
 				} else {
 					return TimestampFormatStd
 				}
@@ -208,6 +219,8 @@ func GenTimestampFormat(tsFormatType int, flag int) string {
 			} else {
 				if flag&(Lmicroseconds) != 0 {
 					return "15:04:05.000000"
+				} else if flag&(Lmilliseconds) != 0 {
+					return "15:04:05.000"
 				} else {
 					return TimestampFormatStdTime
 				}
