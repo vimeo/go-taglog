@@ -47,12 +47,12 @@ func ParseTimestampFormatType(fmt string) int {
 
 const (
 	// Format used for printing the timestamp. See time.Time.Format()
-	TimestampFormatISO     = "2006-01-02T15:04:05Z" // ISO 8601 format with date and time
-	TimestampFormatISOTime = "15:04:05Z"            // ISO 8601 format with time only
-	TimestampFormatISODate = "2006-01-02"           // ISO 8601 format with date only
-	TimestampFormatStd     = "2006/01/02 15:04:05"  // Standard format with date and time
-	TimestampFormatStdTime = "15:04:05"             // Standard format with time only
-	TimestampFormatStdDate = "2006/01/02"           // Standard format with date only
+	TimestampFormatISO     = time.RFC3339          // ISO 8601 format with date and time
+	TimestampFormatISOTime = "15:04:05Z07:00"      // ISO 8601 format with time only
+	TimestampFormatISODate = "2006-01-02"          // ISO 8601 format with date only
+	TimestampFormatStd     = "2006/01/02 15:04:05" // Standard format with date and time
+	TimestampFormatStdTime = "15:04:05"            // Standard format with time only
+	TimestampFormatStdDate = "2006/01/02"          // Standard format with date only
 )
 
 // Get a timestamp format from a string. If it does not match a predefined
@@ -179,21 +179,37 @@ func calcTsFormat(params *Params) string {
 	case TimestampFormatTypeISO:
 		if params.Flag&(Ldate|Ltime) != 0 {
 			if params.Flag&Ldate != 0 && params.Flag&Ltime != 0 {
-				return TimestampFormatISO
+				if params.Flag&(Lmicroseconds) != 0 {
+					return "2006-01-02T15:04:05.000000Z07:00"
+				} else {
+					return TimestampFormatISO
+				}
 			} else if params.Flag&Ldate != 0 {
 				return TimestampFormatISODate
 			} else {
-				return TimestampFormatISOTime
+				if params.Flag&(Lmicroseconds) != 0 {
+					return "15:04:05.000000Z07:00"
+				} else {
+					return TimestampFormatISOTime
+				}
 			}
 		}
 	case TimestampFormatTypeStd:
 		if params.Flag&(Ldate|Ltime) != 0 {
 			if params.Flag&Ldate != 0 && params.Flag&Ltime != 0 {
-				return TimestampFormatStd
+				if params.Flag&(Lmicroseconds) != 0 {
+					return "2006/01/02 15:04:05.000000"
+				} else {
+					return TimestampFormatStd
+				}
 			} else if params.Flag&Ldate != 0 {
 				return TimestampFormatStdDate
 			} else {
-				return TimestampFormatStdTime
+				if params.Flag&(Lmicroseconds) != 0 {
+					return "15:04:05.000000"
+				} else {
+					return TimestampFormatStdTime
+				}
 			}
 		}
 	}
@@ -216,16 +232,6 @@ func (this *Logger) Loutput(level string, s string) error {
 
 	tsFormat := calcTsFormat(&this.params)
 	nowStr := now.Format(tsFormat)
-	if this.params.TimestampFormatType != TimestampFormatTypeUnknown && this.params.Flag&Ltime != 0 && this.params.Flag&Lmicroseconds != 0 {
-		switch this.params.TimestampFormatType {
-		case TimestampFormatTypeISO:
-			fracsec := now.Nanosecond() / 1000000
-			nowStr = nowStr[:len(nowStr)-1] + fmt.Sprintf(".%03d", fracsec) + "Z"
-		case TimestampFormatTypeStd:
-			fracsec := now.Nanosecond() / 1000
-			nowStr += fmt.Sprintf(".%06d", fracsec)
-		}
-	}
 
 	if level != "" && this.levelset != nil && this.level != "" {
 		// discard messages lower than the current log level
