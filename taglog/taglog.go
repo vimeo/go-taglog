@@ -622,7 +622,7 @@ func (this *Logger) Panic(v ...interface{}) {
 
 // See log.Logger.Panicf
 func (this *Logger) Panicf(format string, v ...interface{}) {
-	s := fmt.Sprintln(v...)
+	s := fmt.Sprintf(format, v...)
 	this.Output(s)
 	panic(s)
 }
@@ -831,7 +831,7 @@ func Panic(v ...interface{}) {
 
 // See log.Panicf
 func Panicf(format string, v ...interface{}) {
-	s := fmt.Sprintln(v...)
+	s := fmt.Sprintf(format, v...)
 	std.Output(s)
 	panic(s)
 }
