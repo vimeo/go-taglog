@@ -127,23 +127,51 @@ type Params struct {
 	Flag                int
 }
 
-// taglog counterpart to the log.Logger type
+// An "out" is a struct that ensures a mutex and io.Writer travel together.
+type out struct {
+	*sync.Mutex
+	io.Writer
+}
+
+// Logger prints formatted log lines.
+//
+// A *Logger is not safe for concurrent modification, but is safe for concurrent
+// calls to generate log lines. A Copy call counts as modification.
+//
+// The following is valid:
+//
+//	n := New(os.Stderr, "", 0)
+//	n.SetPrefix("log: ")
+//	go func() { n.Println("one") }()
+//	go func() { n.Println("two") }()
+//
+// The following is invalid:
+//
+//	n := New(os.Stderr, "", 0)
+//	go func() {
+//		n.SetPrefix("log: ")
+//		n.Println("one")
+//	}()
+//	go func() { n.Println("two") }()
 type Logger struct {
-	mu            sync.Mutex
 	tags          Tags
 	levelset      *LevelSet
 	level         string
 	levelTag      string
 	standardLevel string
-	out           io.Writer
 	params        Params
+
+	out out
 }
 
 // See log.New
-func New(out io.Writer, prefix string, flag int) *Logger {
+func New(w io.Writer, prefix string, flag int) *Logger {
 	tl := new(Logger)
 	tl.tags = make(Tags)
-	tl.out = out
+	tl.out = out{
+		Mutex:  &sync.Mutex{},
+		Writer: w,
+	}
 	tl.params = DefaultParams
 	tl.params.Prefix = prefix
 	tl.params.Flag = flag
@@ -169,17 +197,21 @@ func Global() *Logger {
 
 // Create a new Logger by copying the formatting and tags from another Logger.
 func (this *Logger) Copy() *Logger {
-	this.mu.Lock()
-	tl := *this
+	tl := Logger{
+		level:         this.level,
+		standardLevel: this.standardLevel,
+		levelTag:      this.levelTag,
+		levelset:      this.levelset,
+		out:           this.out,
+		params:        this.params,
+		tags:          make(Tags),
+	}
 
 	// deep copy tags
-	tl.tags = make(Tags)
 	for k, v := range this.tags {
 		tl.tags[k] = v
 	}
 
-	tl.mu.Unlock()
-	this.mu.Unlock()
 	return &tl
 }
 
@@ -255,11 +287,11 @@ func (this *Logger) Loutput(level string, s string) error {
 	if this.params.Flag&(LUTC) != 0 {
 		now = now.UTC()
 	}
-	this.mu.Lock()
-	defer this.mu.Unlock()
 
-	tsFormat := calcTsFormat(&this.params)
-	nowStr := now.Format(tsFormat)
+	var nowStr string
+	if tsFormat := calcTsFormat(&this.params); tsFormat != "" {
+		nowStr = now.Format(tsFormat)
+	}
 
 	if level != "" && this.levelset != nil && this.level != "" {
 		// discard messages lower than the current log level
@@ -319,64 +351,50 @@ func (this *Logger) Loutput(level string, s string) error {
 	}
 
 	b = append(b, '\n')
+	this.out.Lock()
 	_, err = this.out.Write(b)
+	this.out.Unlock()
 	return err
 }
 
 // Get the formatting parameters.
 func (this *Logger) Params() Params {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	return this.params
 }
 
 // See log.Logger.SetFlags
 func (this *Logger) SetFlags(flag int) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	this.params.Flag = flag
 }
 
 // See log.Logger.Flags
 func (this *Logger) Flags() int {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	return this.params.Flag
 }
 
 // See log.Logger.SetPrefix
 func (this *Logger) SetPrefix(prefix string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	this.params.Prefix = prefix
 }
 
 // See log.Logger.Prefix
 func (this *Logger) Prefix() string {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	return this.params.Prefix
 }
 
 // Set the timestamp format type.
 func (this *Logger) SetTimestampFormatType(tsFormatType int) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	this.params.TimestampFormatType = tsFormatType
 	this.params.TimestampFormat = ""
 }
 
 // Get the timestamp format type.
 func (this *Logger) TimestampFormatType() int {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	return this.params.TimestampFormatType
 }
 
 // Set the timestamp format.
 func (this *Logger) SetTimestampFormat(tsFormat string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	tsFormat = ParseTimestampFormat(tsFormat)
 	this.params.TimestampFormat = tsFormat
 	switch tsFormat {
@@ -391,15 +409,11 @@ func (this *Logger) SetTimestampFormat(tsFormat string) {
 
 // Get the timestamp format.
 func (this *Logger) TimestampFormat() string {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	return this.params.TimestampFormat
 }
 
 // Set the log format.
 func (this *Logger) SetFormat(format int) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if this.params.Format == FormatJSON && format == FormatPlain {
 		this.tags.Del("timestamp")
 		this.tags.Del("msg")
@@ -409,15 +423,11 @@ func (this *Logger) SetFormat(format int) {
 
 // Get the log format.
 func (this *Logger) Format() int {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	return this.params.Format
 }
 
 // Add one or more values to a key.
 func (this *Logger) AddTag(key string, value ...string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		key = "tags"
 	}
@@ -426,8 +436,6 @@ func (this *Logger) AddTag(key string, value ...string) {
 
 // Add one or more values to a key, merging any duplicate values.
 func (this *Logger) MergeTag(key string, value ...string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		key = "tags"
 	}
@@ -437,8 +445,6 @@ func (this *Logger) MergeTag(key string, value ...string) {
 // Append one or more values to a key. This the same as AddTag and is only
 // provided to couple with Pop() for code clarity.
 func (this *Logger) PushTag(key string, value ...string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		key = "tags"
 	}
@@ -447,8 +453,6 @@ func (this *Logger) PushTag(key string, value ...string) {
 
 // Remove the last value for a key
 func (this *Logger) PopTag(key string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		key = "tags"
 	}
@@ -457,8 +461,6 @@ func (this *Logger) PopTag(key string) {
 
 // Set one or more values for a key. Any existing values are discarded.
 func (this *Logger) SetTag(key string, value ...string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		key = "tags"
 	}
@@ -468,8 +470,6 @@ func (this *Logger) SetTag(key string, value ...string) {
 // Get the first value for a key. If the key does not exist, an empty string is
 // returned.
 func (this *Logger) GetTag(key string) string {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		key = "tags"
 	}
@@ -479,8 +479,6 @@ func (this *Logger) GetTag(key string) string {
 // Get all the values for a key. If the key does not exist, a nil slice is
 // returned.
 func (this *Logger) GetTags(key string) []string {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		key = "tags"
 	}
@@ -489,8 +487,6 @@ func (this *Logger) GetTags(key string) []string {
 
 // Delete a key.
 func (this *Logger) DelTag(key string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	if key == "" {
 		this.tags.Del("tags")
 	}
@@ -499,43 +495,34 @@ func (this *Logger) DelTag(key string) {
 
 // Delete all keys.
 func (this *Logger) DelTags() {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	this.tags.DelAll()
 }
 
 // Export all tags as a map of string slices.
 func (this *Logger) ExportTags() map[string][]string {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	return this.tags.Export()
 }
 
 // Import tags from a map of string slices.
 func (this *Logger) ImportTags(tags map[string][]string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	this.tags.Import(tags)
 }
 
 // Set the output Writer.
 func (this *Logger) SetOutput(w io.Writer) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
-	this.out = w
+	this.out = out{
+		Mutex:  &sync.Mutex{},
+		Writer: w,
+	}
 }
 
 // Get the output Writer.
 func (this *Logger) GetOutput() io.Writer {
-	this.mu.Lock()
-	defer this.mu.Unlock()
-	return this.out
+	return this.out.Writer
 }
 
 // Parse tags from a list of "key=value" strings.
 func (this *Logger) ParseTags(tags []string) {
-	this.mu.Lock()
-	defer this.mu.Unlock()
 	for _, s := range tags {
 		ss := strings.Split(s, "=")
 		if len(ss) == 1 {
