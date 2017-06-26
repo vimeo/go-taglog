@@ -157,7 +157,6 @@ var std = New(os.Stderr, "", LstdFlags)
 // Default parameters
 var DefaultParams = Params{
 	Format:              FormatPlain,
-	TimestampFormat:     TimestampFormatStd,
 	TimestampFormatType: TimestampFormatTypeStd,
 	Prefix:              "",
 	Flag:                LstdFlags,
@@ -236,10 +235,10 @@ func GenTimestampFormat(tsFormatType int, flag int) string {
 }
 
 func calcTsFormat(params *Params) string {
-	if params.TimestampFormat != "" {
-		return params.TimestampFormat
+	if params.TimestampFormat == "" && params.Flag != 0 {
+		params.TimestampFormat = GenTimestampFormat(params.TimestampFormatType, params.Flag)
 	}
-	return GenTimestampFormat(params.TimestampFormatType, params.Flag)
+	return params.TimestampFormat
 }
 
 // See log.Logger.Output
