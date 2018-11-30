@@ -115,7 +115,7 @@ func GetLevel() string {
 }
 
 func SetLevelTag(tag string) {
-	std.SetLevel(tag)
+	std.SetLevelTag(tag)
 }
 
 func SetStandardLevel(lvl string) {
